@@ -55,6 +55,22 @@ services:
       - db
       - redis
 
+  worker:
+    build:
+      context: ..
+      dockerfile: ./deployment/Dockerfile
+    environment:
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+      DB_PORT: ${DB_PORT}
+      DB_HOST: db
+      INSTANCE_NAME: worker
+    depends_on:
+      - db
+      - redis
+    command: celery -A app.celery_app.celery worker --loglevel=info
+
   nginx:
     image: nginx:latest
     ports:

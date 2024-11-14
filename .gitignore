@@ -1,0 +1,10 @@
+.vscode/
+
+.venv
+
+.env
+
+__pycache__/
+
+deployment/postgres_data
+deployment/redis_data

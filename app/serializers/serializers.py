@@ -1,5 +1,5 @@
 from pydantic import BaseModel, validator, ValidationError
-from typing import Optional, List
+from typing import Optional, List, TypeVar, Generic
 
 from rdkit import Chem
 
@@ -52,6 +52,15 @@ class MoleculeUpdateSerializer(BaseModel):
     @validator('smiles')
     def validate_smiles(cls, value):
         return validate_smiles(value)
+
+    class Config:
+        orm_mode = True
+
+T = TypeVar('T')
+class CeleryResult(BaseModel, Generic[T]):
+    task_id: str
+    status: str
+    result: Optional[T] = None
 
     class Config:
         orm_mode = True

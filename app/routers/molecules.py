@@ -10,7 +10,8 @@ from rdkit import Chem
 from app.config import settings
 from app.models.molecules import Molecule
 from app.serializers.serializers import MoleculeCreateSerializer, MoleculeReadSerializer, validate_smiles, \
-    MoleculeUpdateSerializer, MoleculeListCreateSerializer, MoleculeListSerializer
+    MoleculeUpdateSerializer, MoleculeListCreateSerializer, MoleculeListSerializer, CeleryResult
+from app.services.tasks_molecules import perform_substructure_search
 from app.storage.cache import get_cached_result, set_cache
 from app.storage.postgres.molecules import MoleculeStorage
 import utils.logger
@@ -87,45 +88,19 @@ def delete_molecule(molecule_id: int):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@mol_router.get("/molecules", response_model=List[MoleculeReadSerializer])
+@mol_router.get("/molecules", response_model=dict)
 def search_molecules(request: Request, smiles: Optional[str] = None, limit: Optional[int] = 1000, offset: Optional[int] = 0):
     logger.info(f'search_molecules...\nsmiles: {smiles}, limit: {limit}, offset: {offset}')
 
-    cache_key = f'search:{request.url}'
-    cached_result = get_cached_result(cache_key)
-    if cached_result:
-        logger.info(f'cached_result: {cached_result}')
-        return cached_result
+    task = perform_substructure_search.delay(str(request.url), smiles, offset, limit)
+    return {"task_id": task.id}
 
-    storage = MoleculeStorage()
 
-    if smiles:
-        try:
-            validate_smiles(smiles)
-            substructure_smiles = Chem.MolFromSmiles(smiles)
-
-            results = []
-            for molecules_batch in storage.get_all(offset=offset, limit=limit):
-                for molecule in molecules_batch:
-                    mol = Chem.MolFromSmiles(molecule.smiles)
-                    if mol and mol.HasSubstructMatch(substructure_smiles):
-                        results.append(molecule)
-            logger.info(f'search_molecules: {results}')
-            molecule_list_schema = [MoleculeReadSerializer.model_validate(result.__dict__) for result in results]
-            set_cache(cache_key, [molecule.model_dump() for molecule in molecule_list_schema])
-            set_cache(cache_key, [result.__dict__ for result in results])
-            return results
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-    try:
-        results = storage.get_all()
-        molecule_list_schema = [MoleculeReadSerializer.model_validate(result.__dict__) for result in results]
-        set_cache(cache_key, [molecule.model_dump() for molecule in molecule_list_schema])
-        return results
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
+@mol_router.get("/molecules/search/{task_id}", response_model=CeleryResult)
+def get_search_results(task_id: str):
+    logger.info(f'get_search_results...\ntask_id: {task_id}')
+    result = perform_substructure_search.AsyncResult(task_id)
+    return CeleryResult(task_id=task_id, status=result.status, result=result.result)
 
 
 @mol_router.post("/molecules/upload-json", response_model=List[MoleculeReadSerializer])
