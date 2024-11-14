@@ -1,0 +1,7 @@
+{
+  "molecules": [
+    {"name": "1","smiles": "CCO"},
+    {"name": "2","smiles": "CCC"},
+    {"name": "3","smiles": "CCN"}
+  ]
+}
